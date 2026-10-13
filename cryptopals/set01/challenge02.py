@@ -1,6 +1,22 @@
-"""Set 1, challenge 2. Implement the solution as you work through it."""
+'''
+Set 1, challenge 2:
+Write a function that takes two equal-length buffers 
+and produces their XOR combination
+'''
 
+def fixed_xor(left: str, right: str) -> bytes:
 
-def fixed_xor(left: bytes, right: bytes) -> bytes:
-    """XOR two equal-length byte strings."""
-    raise NotImplementedError("Challenge 2 is not implemented yet")
+    if len(left) != len(right):
+        raise ValueError("Input buffers should be of equal length")
+
+    left_bytes = bytes.fromhex(left)
+    right_bytes = bytes.fromhex(right)
+    result = bytes(a ^ b for a,b in zip(left_bytes, right_bytes))
+
+    return result
+
+if __name__ == "__main__":
+    left = input("Enter the first hex string: ")
+    right = input("Enter the second hex string: ")
+    result = fixed_xor(left, right)
+    print("XOR result: ", result.hex())
