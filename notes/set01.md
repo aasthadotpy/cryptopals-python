@@ -104,8 +104,8 @@ pair of bytes, then display the result as hex.
 
 No imported library is needed for the conversion and XOR operation.
 
-- `fixed_xor(left: str, right: str) -> bytes`: the current solution accepts hex
-  strings and intends to return raw bytes.
+- `fixed_xor(left: str, right: str) -> str`: the current solution accepts hex
+  strings and returns the XOR result as hex text.
 - `bytes.fromhex(...)`: converts each input hex string to its underlying bytes.
 - `len(...)`: currently checks the input text lengths. Checking decoded buffer
   lengths instead is the recommended improvement below.
@@ -128,13 +128,12 @@ No imported library is needed for the conversion and XOR operation.
    end of the shorter buffer.
 4. **Pair the bytes with `zip()` and XOR each pair.** Python supports `^` for
    integers, but not directly for whole `bytes` objects.
-5. **Collect the XOR values with `bytes(...)` and return them.** This matches
-   the function's `-> bytes` annotation and preserves each byte, including
-   leading zero bytes.
-6. **Call `.hex()` when printing.** Keep the result as raw bytes inside the
-   function and convert it to readable hex at the console boundary.
+5. **Collect the XOR values with `bytes(...)`.** This preserves each byte,
+   including leading zero bytes.
+6. **Return `result.hex()` and print it directly.** The function now returns
+   readable hex text, matching its `-> str` annotation.
 
-The current solution now constructs and returns the XOR bytes correctly. This
+The current solution constructs XOR bytes and returns their hex representation. This
 recommended version also moves the length check after decoding:
 
 ```python
@@ -142,7 +141,7 @@ left_bytes = bytes.fromhex(left)
 right_bytes = bytes.fromhex(right)
 if len(left_bytes) != len(right_bytes):
     raise ValueError("Input buffers should be of equal length")
-return bytes(a ^ b for a, b in zip(left_bytes, right_bytes))
+return bytes(a ^ b for a, b in zip(left_bytes, right_bytes)).hex()
 ```
 
 The expression inside `bytes(...)` generates one XOR result for each byte pair.
@@ -156,7 +155,7 @@ Run `python3 cryptopals/set01/challenge02.py` from the repository root. Inputs
 For the hex-string interface, an automatic check is:
 
 ```python
-assert fixed_xor("0f00", "f00f").hex() == "ff0f"
+assert fixed_xor("0f00", "f00f") == "ff0f"
 ```
 
 The original implementation raised `TypeError` at
@@ -171,8 +170,7 @@ it.
 - `left_bytes ^ right_bytes` fails because whole byte buffers do not support
   the `^` operator. XOR each pair of integer byte values instead.
 - The built-in `hex()` accepts an integer and returns text with a `0x` prefix.
-  It does not build a byte buffer. Wrapping the result in `hex()` conflicts
-  with both the `-> bytes` annotation and the later `result.hex()` call.
+  It does not accept a byte buffer. Use the buffer's `.hex()` method instead.
 - Validate buffer lengths after decoding, rather than comparing hex text
   lengths.
 - The solution and test currently disagree about whether inputs are hex text
@@ -213,10 +211,92 @@ input hex text → bytes.fromhex() → input bytes → XOR → result bytes → 
 
 `hex(255)` returns the string `"0xff"`, but `hex(result)` raises `TypeError`
 because `result` is a byte buffer. Use `result.hex()` to represent a whole
-buffer as hex. The console already does this, so returning raw bytes from
-`fixed_xor()` is consistent. Returning `result.hex()` from the function is also
-possible, but would require changing its return annotation to `str` and printing
-that returned string directly.
+buffer as hex. The current `fixed_xor()` returns `result.hex()`, is annotated
+with `-> str`, and the console prints the returned string directly. Returning
+raw bytes is an alternative design, with `.hex()` then applied by the caller.
+
+## Challenge 3
+
+### Goal and approach
+
+Find the single byte used to XOR every byte of the ciphertext, and recover the
+message. The [challenge](https://cryptopals.com/sets/1/challenges/3) suggests
+scoring candidate messages by how much they resemble English.
+
+XOR reverses itself: `(original_byte ^ key) ^ key == original_byte`. There are
+only 256 possible byte values, so try every key, decrypt with it, and keep the
+candidate with the highest English score.
+
+### Libraries and functions
+
+No imported library is needed for this initial approach.
+
+- `bytes.fromhex(ciphertext)`: decodes the provided hex text into ciphertext
+  bytes. This step alone does not decrypt the message.
+- `range(256)`: generates all possible keys, from 0 through 255.
+- `bytes(b ^ key for b in ciphertext_bytes)`: XORs each integer byte value with
+  the same candidate key and constructs a new candidate message buffer.
+- `english_score(candidate)`: a proposed helper that rewards English-looking
+  bytes and penalizes unlikely ones.
+- `candidate.lower()`: normalizes ASCII letter case for scoring; leaves the
+  original candidate available for displaying with its original capitalization.
+- `float("-inf")`: an initial best score below any finite candidate score.
+- `.decode("ascii")`: displays the winning message as text if it is ASCII.
+- `chr(best_key)`: shows the key as a character; the numeric key is what XOR uses.
+
+### Steps and reasons
+
+1. **Decode hex once.** The key acts on the underlying data, not the hex digits.
+2. **Try each of the 256 keys.** A single-byte key has a small enough search
+   space to examine completely.
+3. **XOR every ciphertext byte with the candidate key.** The original encryption
+   used that same key at every position; repeating XOR reverses it.
+4. **Score each candidate as English.** Generating candidates alone cannot tell
+   us which one is the intended message. Reward spaces and common letters and
+   penalize nonprintable or non-ASCII bytes.
+5. **Remember the highest score, key, and candidate.** These identify the best
+   guess and its recovered message.
+6. **Print the winning message and return the key.** The function currently
+   prints the message as a bytes representation and returns an integer key,
+   which the console then prints.
+
+The current `english_score()` uses these weights:
+
+- Space: +3.
+- Common letters in `aeioutrshdln`: +2, after lowercasing.
+- Other ASCII letters: +1.
+- Everything else, including punctuation and digits: -5.
+
+These rules are alternatives per byte, not cumulative rewards. This simple
+heuristic selects the expected key for the supplied challenge input, but is not
+a guarantee for arbitrary ciphertexts. More detailed letter-frequency scores
+can improve it later.
+
+### Checking the approach
+
+- Verify the XOR reversal with `(65 ^ 42) ^ 42 == 65`.
+- Check that `english_score(b"hello world")` exceeds the score of
+  `bytes([0, 255, 1])`.
+- Run the supplied ciphertext through all keys and inspect the top candidates.
+  The best one should read as an English sentence.
+
+### Mistakes / surprises and lessons
+
+- A representation such as `b'\x1b773...'` is still encrypted data. Printable
+  characters appear because Python uses readable ASCII characters when showing
+  byte values; this does not mean the message has been decrypted.
+- The current `find_single_byte_xor_key()` now searches all keys, prints the
+  winning message bytes, and returns the integer key as annotated.
+- Do not discard candidates simply because they are valid ASCII, or accept the
+  first readable candidate. Score all keys and compare the results.
+- Decode to text for display after evaluating the raw byte candidates. Some
+  wrong keys produce bytes that cannot be decoded as ASCII.
+- `message.lower()` converts uppercase ASCII letters to lowercase so they get
+  the same score. Bytes are not inherently lowercase: they hold values 0–255.
+- Iterating over `message` produces integers, so compare a space with
+  `byte == ord(" ")` (or `byte == 32`), rather than `byte == " "`.
+- The current scoring penalizes valid English punctuation and digits too.
+  Giving these printable characters a neutral score is a possible refinement.
 
 Add an entry for each challenge as you work through the set, covering the goal,
 approach, libraries and functions, steps and reasons, example checks, mistakes,
