@@ -298,6 +298,53 @@ can improve it later.
 - The current scoring penalizes valid English punctuation and digits too.
   Giving these printable characters a neutral score is a possible refinement.
 
+## Challenge 4
+
+### Goal and approach
+
+Identify which input line was encrypted with single-byte XOR. Reuse the key
+search and English scoring from Challenge 3, comparing candidates across all
+lines. Keep the recovered message and key out of these notes to avoid spoilers.
+
+### Functions and file handling
+
+- `open(path, "r", encoding="utf-8")`: reads the file as text.
+- `with`: closes the file automatically when the block ends.
+- `for line in file`: reads input one line at a time.
+- `line.strip()`: removes surrounding whitespace, including the newline.
+- `bytes.fromhex(...)`: decodes a line into encrypted bytes.
+- `range(256)` and `bytes(a ^ key for a in ...)`: try every single-byte key.
+- `english_score(...)`: ranks candidate plaintexts using the chosen weights.
+- `chr(key)`: converts a numeric key into a character for display.
+
+### Steps and reasons
+
+1. Open the data file and read each line, so every ciphertext is considered.
+2. Strip whitespace and decode each line, so XOR acts on the actual byte values.
+3. Try all keys for each line and score each result, as in Challenge 3.
+4. Track the best candidate across the entire file, so the final result selects
+   a line as well as a key.
+
+### Review and checking
+
+The initial version initialized `best_score`, `best_key`, and `best_candidate`
+inside the line loop. This forgot the previous line's winner, so the final
+print showed the best candidate for the last line only.
+
+The revised version initializes those variables before the line loop, retaining
+the best result across the entire file. A local check over all 327 lines and
+all 256 keys per line confirmed that the returned search state matches the
+highest score across the file. No key or plaintext was revealed during review.
+
+### Lessons and limitations
+
+- Initialization inside a loop resets state on each iteration. The placement
+  must match whether a value belongs to one line or the entire search.
+- Relative file paths are resolved from the working directory. The current
+  absolute path works on this machine but will need adjusting elsewhere.
+- Skip blank lines if the input file may contain them.
+- The highest heuristic score is a candidate to inspect, not proof of English.
+
 Add an entry for each challenge as you work through the set, covering the goal,
 approach, libraries and functions, steps and reasons, example checks, mistakes,
 and lessons learned.
